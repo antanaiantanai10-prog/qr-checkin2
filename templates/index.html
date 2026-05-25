@@ -8,9 +8,38 @@
         h1 { color: #333; }
         li { margin: 20px 0; padding: 15px; background: white; border-radius: 8px; }
         .message { padding: 10px; background: #d4edda; color: #155724; border-radius: 5px; margin: 15px 0; }
+        .admin-bar { 
+            background: #343a40; 
+            color: white; 
+            padding: 10px 20px; 
+            border-radius: 5px; 
+            margin-bottom: 20px; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+        }
+        .btn {
+            padding: 8px 16px; 
+            text-decoration: none; 
+            border-radius: 5px; 
+            font-size: 16px;
+        }
     </style>
 </head>
 <body>
+    <!-- Admin juosta -->
+    <div class="admin-bar">
+        <span><strong>QR Check-in Sistema</strong></span>
+        {% if is_admin %}
+            <div>
+                <span style="margin-right: 15px;">✅ Jūs esate prisijungęs kaip Administratorius</span>
+                <a href="/logout" class="btn" style="background: #dc3545; color: white;">Atsijungti</a>
+            </div>
+        {% else %}
+            <a href="/login" class="btn" style="background: #007bff; color: white;">🔑 Prisijungti kaip Admin</a>
+        {% endif %}
+    </div>
+
     <h1>QR Kodų Check-in Sistema</h1>
 
     {% with messages = get_flashed_messages() %}
@@ -21,22 +50,28 @@
         {% endif %}
     {% endwith %}
 
+    {% if is_admin %}
     <h2>Pridėti naują žmogų</h2>
     <form method="POST" action="/add">
         <input type="text" name="first_name" placeholder="Vardas" required style="padding:8px;">
         <input type="text" name="last_name" placeholder="Pavardė" required style="padding:8px;">
         <button type="submit" style="padding:8px 16px;">Pridėti</button>
     </form>
-
     <hr>
+    {% endif %}
+
     <h2>Žmonių sąrašas</h2>
     <ul>
     {% for p in people %}
         <li>
             <strong>{{ p.first_name }} {{ p.last_name }}</strong><br><br>
-            <a href="/generate_qr/{{ p.id }}" style="font-size: 16px; padding: 8px 12px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;">
+            
+            {% if is_admin %}
+            <a href="/generate_qr/{{ p.id }}" class="btn" style="background: #007bff; color: white; text-decoration: none;">
                 🔄 Generuoti / Atnaujinti QR kodą
             </a>
+            {% endif %}
+            
             <br><br>
             <img src="/static/qrcodes/{{ p.id }}.png" width="220" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';">
             <span style="color: gray; display: none;">QR kodas dar nesugeneruotas</span>

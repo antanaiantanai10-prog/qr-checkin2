@@ -4,20 +4,58 @@
     <meta charset="UTF-8">
     <title>Skenavimų Logai</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 40px; background-color: #f9f9f9; }
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 40px; 
+            background-color: #f9f9f9; 
+        }
         h1 { color: #333; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; }
-        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-        th { background-color: #f2f2f2; }
-        .back { margin-bottom: 20px; font-size: 18px; }
-        .empty { font-size: 18px; color: #666; margin-top: 30px; }
+        table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-top: 20px; 
+            background: white;
+        }
+        th, td { 
+            padding: 12px; 
+            text-align: left; 
+            border-bottom: 1px solid #ddd; 
+        }
+        th { 
+            background-color: #f2f2f2; 
+        }
+        .back { 
+            margin-bottom: 20px; 
+            font-size: 18px;
+        }
+        .empty { 
+            font-size: 18px; 
+            color: #666; 
+            margin-top: 30px; 
+        }
+        .btn-delete {
+            padding: 6px 12px;
+            background: #dc3545;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .btn-delete:hover {
+            background: #c82333;
+        }
     </style>
 </head>
 <body>
     <h1>📋 Skenavimų Logai</h1>
+    
     <div class="back">
         <a href="/">← Grįžti į pagrindinį puslapį</a>
     </div>
+
+    {% if is_admin %}
+    <p><strong>Administratoriaus režimas — galite trinti įrašus</strong></p>
+    {% endif %}
 
     {% if logs %}
         <table>
@@ -26,6 +64,9 @@
                 <th>Vardas</th>
                 <th>Pavardė</th>
                 <th>Skenavimo laikas</th>
+                {% if is_admin %}
+                <th>Veiksmai</th>
+                {% endif %}
             </tr>
             {% for log in logs %}
             <tr>
@@ -33,11 +74,20 @@
                 <td><strong>{{ log.first_name }}</strong></td>
                 <td><strong>{{ log.last_name }}</strong></td>
                 <td>{{ log.scanned_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                {% if is_admin %}
+                <td>
+                    <a href="/delete_log/{{ log.id }}" 
+                       class="btn-delete"
+                       onclick="return confirm('Ar tikrai norite ištrinti šį įrašą?')">
+                        🗑️ Ištrinti
+                    </a>
+                </td>
+                {% endif %}
             </tr>
             {% endfor %}
         </table>
     {% else %}
-        <p class="empty">Kol kas nėra jokių skenavimų.</p>
+        <p class="empty">Kol kas nėra jokių skenavimų. Nuskenuok QR kodą, kad atsirastų įrašai.</p>
     {% endif %}
 </body>
 </html>
