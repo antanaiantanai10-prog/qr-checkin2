@@ -23,11 +23,25 @@
             text-decoration: none; 
             border-radius: 5px; 
             font-size: 16px;
+            margin-right: 8px;
+        }
+        .info-box {
+            background: #e3f2fd;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            text-align: center;
+            font-size: 18px;
+        }
+        .upload-form {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
         }
     </style>
 </head>
 <body>
-    <!-- Admin juosta -->
     <div class="admin-bar">
         <span><strong>QR Check-in Sistema</strong></span>
         {% if is_admin %}
@@ -50,36 +64,60 @@
         {% endif %}
     {% endwith %}
 
+    {% if not is_admin %}
+        <div class="info-box">
+            <h2>Sveiki!</h2>
+            <p>Nuskenuokite QR kodą, kad užsiregistruotumėte.</p>
+        </div>
+    {% endif %}
+
     {% if is_admin %}
-    <h2>Pridėti naują žmogų</h2>
+    <div class="upload-form">
+        <h2>📤 Įkelti žmones iš Excel / CSV</h2>
+        <form method="POST" action="/upload" enctype="multipart/form-data">
+            <input type="file" name="file" accept=".xlsx,.xls,.csv" required>
+            <button type="submit" class="btn" style="background: #28a745; color: white;">Įkelti failą</button>
+        </form>
+        <small><strong>Stulpelių tvarka:</strong> 1. Pažymėjimo numeris, 2. Vardas, 3. Pavardė, 4. Licencijos numeris, 5. El. paštas</small>
+    </div>
+
+    <h2>Pridėti vieną žmogų</h2>
     <form method="POST" action="/add">
-        <input type="text" name="first_name" placeholder="Vardas" required style="padding:8px;">
-        <input type="text" name="last_name" placeholder="Pavardė" required style="padding:8px;">
+        <input type="text" name="certificate_number" placeholder="Pažymėjimo numeris" style="padding:8px; margin:5px;">
+        <input type="text" name="first_name" placeholder="Vardas" required style="padding:8px; margin:5px;">
+        <input type="text" name="last_name" placeholder="Pavardė" required style="padding:8px; margin:5px;">
+        <input type="text" name="license_number" placeholder="Licencijos numeris" style="padding:8px; margin:5px;">
+        <input type="email" name="email" placeholder="El. paštas" style="padding:8px; margin:5px;">
         <button type="submit" style="padding:8px 16px;">Pridėti</button>
     </form>
     <hr>
-    {% endif %}
 
     <h2>Žmonių sąrašas</h2>
     <ul>
     {% for p in people %}
         <li>
-            <strong>{{ p.first_name }} {{ p.last_name }}</strong><br><br>
+            <strong>{{ p.first_name }} {{ p.last_name }}</strong><br>
+            {% if p.certificate_number %}<small>Pažymėjimas: {{ p.certificate_number }}</small><br>{% endif %}
+            {% if p.license_number %}<small>Licencija: {{ p.license_number }}</small><br>{% endif %}
+            {% if p.email %}<small>Email: {{ p.email }}</small><br>{% endif %}
             
-            {% if is_admin %}
-            <a href="/generate_qr/{{ p.id }}" class="btn" style="background: #007bff; color: white; text-decoration: none;">
-                🔄 Generuoti / Atnaujinti QR kodą
+            <br>
+            <a href="/generate_qr/{{ p.id }}" class="btn" style="background: #007bff; color: white;">🔄 Generuoti QR</a>
+            <a href="/delete_person/{{ p.id }}" class="btn" style="background: #dc3545; color: white;" 
+               onclick="return confirm('Ištrinti {{ p.first_name }} {{ p.last_name }}?')">
+                🗑️ Ištrinti
             </a>
-            {% endif %}
             
             <br><br>
-            <img src="/static/qrcodes/{{ p.id }}.png" width="220" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';">
-            <span style="color: gray; display: none;">QR kodas dar nesugeneruotas</span>
+            <img src="/static/qrcodes/{{ p.id }}.png" width="200" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';">
+            <span style="color: gray; display: none;">QR kodas nesugeneruotas</span>
         </li>
     {% endfor %}
     </ul>
+    {% endif %}
 
-    <br>
-    <a href="/logs" style="font-size: 18px;">📋 Peržiūrėti visus skenavimų logus</a>
+    {% if is_admin %}
+    <br><a href="/logs" style="font-size: 18px;">📋 Peržiūrėti skenavimų logus</a>
+    {% endif %}
 </body>
 </html>
