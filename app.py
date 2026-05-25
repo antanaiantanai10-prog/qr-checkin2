@@ -91,7 +91,7 @@ def add_person():
     flash(f'Pridėtas: {person.first_name} {person.last_name}')
     return redirect(url_for('index'))
 
-# === ĮKĖLIMAS IŠ EXCEL / CSV (nauja tvarka) ===
+# === ĮKĖLIMAS IŠ EXCEL ===
 @app.route('/upload', methods=['POST'])
 def upload_file():
     if not is_admin():
@@ -118,7 +118,6 @@ def upload_file():
             df = pd.read_excel(file)
 
         added_count = 0
-
         for _, row in df.iterrows():
             certificate_number = None
             first_name = None
@@ -128,7 +127,7 @@ def upload_file():
 
             col_map = {str(col).strip().lower(): col for col in df.columns}
 
-            # Pagal stulpelių pavadinimus
+            # 1. Pažymėjimo numeris
             for key in ['pažymėjimo numeris', 'pazyme', 'certificate_number', 'certificate']:
                 if key in col_map:
                     certificate_number = str(row[col_map[key]]).strip()
@@ -136,6 +135,7 @@ def upload_file():
             if not certificate_number and len(df.columns) > 0:
                 certificate_number = str(row.iloc[0]).strip()
 
+            # 2. Vardas
             for key in ['vardas', 'first_name', 'name']:
                 if key in col_map:
                     first_name = str(row[col_map[key]]).strip()
@@ -143,6 +143,7 @@ def upload_file():
             if not first_name and len(df.columns) > 1:
                 first_name = str(row.iloc[1]).strip()
 
+            # 3. Pavardė
             for key in ['pavardė', 'pavarde', 'last_name', 'surname']:
                 if key in col_map:
                     last_name = str(row[col_map[key]]).strip()
@@ -150,6 +151,7 @@ def upload_file():
             if not last_name and len(df.columns) > 2:
                 last_name = str(row.iloc[2]).strip()
 
+            # 4. Licencijos numeris
             for key in ['licencijos numeris', 'licencija', 'license_number', 'license']:
                 if key in col_map:
                     license_number = str(row[col_map[key]]).strip()
@@ -157,6 +159,7 @@ def upload_file():
             if not license_number and len(df.columns) > 3:
                 license_number = str(row.iloc[3]).strip()
 
+            # 5. El. paštas
             for key in ['el. paštas', 'el pastas', 'email', 'e-mail']:
                 if key in col_map:
                     email = str(row[col_map[key]]).strip()
@@ -183,7 +186,25 @@ def upload_file():
     
     return redirect(url_for('index'))
 
-# Kitos funkcijos lieka tos pačios...
+@app.route('/delete_qr/<int:person_id>')
+def delete_qr(person_id):
+    if not is_admin():
+        flash('Tik administratorius gali trinti!')
+        return redirect(url_for('index'))
+    
+    person = Person.query.get_or_404(person_id)
+    qr_path = f"static/qrcodes/{person.id}.png"
+    
+    if os.path.exists(qr_path):
+        try:
+            os.remove(qr_path)
+            flash(f'Ištrintas QR kodas: {person.first_name} {person.last_name}')
+        except:
+            flash('Klaida trinant QR kodą')
+    else:
+        flash('QR kodas jau nėra')
+    return redirect(url_for('index'))
+
 @app.route('/delete_person/<int:person_id>')
 def delete_person(person_id):
     if not is_admin():
@@ -191,15 +212,17 @@ def delete_person(person_id):
         return redirect(url_for('index'))
     
     person = Person.query.get_or_404(person_id)
+    
     qr_path = f"static/qrcodes/{person.id}.png"
     if os.path.exists(qr_path):
         try:
             os.remove(qr_path)
         except:
             pass
+    
     db.session.delete(person)
     db.session.commit()
-    flash(f'Ištrintas: {person.first_name} {person.last_name}')
+    flash(f'Žmogus visiškai ištrintas: {person.first_name} {person.last_name}')
     return redirect(url_for('index'))
 
 @app.route('/generate_qr/<int:person_id>')

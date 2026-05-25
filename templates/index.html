@@ -103,9 +103,15 @@
             
             <br>
             <a href="/generate_qr/{{ p.id }}" class="btn" style="background: #007bff; color: white;">🔄 Generuoti QR</a>
+            
+            <a href="/delete_qr/{{ p.id }}" class="btn" style="background: #ffc107; color: black;"
+               onclick="return confirm('Ištrinti tik QR kodą {{ p.first_name }} {{ p.last_name }}?')">
+                ❌ Ištrinti QR
+            </a>
+            
             <a href="/delete_person/{{ p.id }}" class="btn" style="background: #dc3545; color: white;" 
-               onclick="return confirm('Ištrinti {{ p.first_name }} {{ p.last_name }}?')">
-                🗑️ Ištrinti
+               onclick="return confirm('VISOIŠTRINTI žmogų {{ p.first_name }} {{ p.last_name }}? (negrįžtama)')">
+                🗑️ Ištrinti žmogų
             </a>
             
             <br><br>
