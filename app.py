@@ -3,6 +3,7 @@ from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 import qrcode
 import os
+from zoneinfo import ZoneInfo  # Python 3.9+
 
 app = Flask(__name__)
 
@@ -12,26 +13,29 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
+# Lietuvos laiko juosta
+LT_TIMEZONE = ZoneInfo("Europe/Vilnius")
+
 # ================== MODELIAI ==================
 class Person(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     first_name = db.Column(db.String(50), nullable=False)
     last_name = db.Column(db.String(50), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(LT_TIMEZONE))
 
 class ScanLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     person_id = db.Column(db.Integer)
     first_name = db.Column(db.String(50))
     last_name = db.Column(db.String(50))
-    scanned_at = db.Column(db.DateTime, default=datetime.utcnow)
+    scanned_at = db.Column(db.DateTime, default=lambda: datetime.now(LT_TIMEZONE))
 
 with app.app_context():
     db.create_all()
 
 # ================== ADMIN LOGIN ==================
 ADMIN_USERNAME = "admin"
-ADMIN_PASSWORD = "admin123"   # <--- ČIA PAKEISK Į SAUGESNĮ!
+ADMIN_PASSWORD = "admin123"   
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -105,8 +109,12 @@ def checkin(person_id):
     db.session.add(log)
     db.session.commit()
     
-    return render_template('success.html', person=person)
-
+    # Dabartinis laikas Lietuvos laiku
+    current_time = datetime.now(LT_TIMEZONE)
+    
+    return render_template('success.html', 
+                         person=person, 
+                         now=current_time.strftime('%Y-%m-%d %H:%M:%S'))
 @app.route('/logs')
 def logs():
     all_logs = ScanLog.query.order_by(ScanLog.scanned_at.desc()).all()
@@ -124,7 +132,6 @@ def delete_log(log_id):
     flash('Įrašas ištrintas')
     return redirect(url_for('logs'))
 
-# ================== PALEIDIMAS ==================
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
