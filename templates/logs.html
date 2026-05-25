@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="lt">
+<head>
+    <meta charset="UTF-8">
+    <title>Skenavimų Logai</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; background-color: #f9f9f9; }
+        h1 { color: #333; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #f2f2f2; }
+        .back { margin-bottom: 20px; font-size: 18px; }
+        .empty { font-size: 18px; color: #666; margin-top: 30px; }
+    </style>
+</head>
+<body>
+    <h1>📋 Skenavimų Logai</h1>
+    <div class="back">
+        <a href="/">← Grįžti į pagrindinį puslapį</a>
+    </div>
+
+    {% if logs %}
+        <table>
+            <tr>
+                <th>#</th>
+                <th>Vardas</th>
+                <th>Pavardė</th>
+                <th>Skenavimo laikas</th>
+            </tr>
+            {% for log in logs %}
+            <tr>
+                <td>{{ loop.index }}</td>
+                <td><strong>{{ log.first_name }}</strong></td>
+                <td><strong>{{ log.last_name }}</strong></td>
+                <td>{{ log.scanned_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+    {% else %}
+        <p class="empty">Kol kas nėra jokių skenavimų.</p>
+    {% endif %}
+</body>
+</html>

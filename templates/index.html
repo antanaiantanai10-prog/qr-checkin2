@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="lt">
+<head>
+    <meta charset="UTF-8">
+    <title>QR Check-in Sistema</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; background-color: #f9f9f9; }
+        h1 { color: #333; }
+        li { margin: 20px 0; padding: 15px; background: white; border-radius: 8px; }
+        .message { padding: 10px; background: #d4edda; color: #155724; border-radius: 5px; margin: 15px 0; }
+    </style>
+</head>
+<body>
+    <h1>QR Kodų Check-in Sistema</h1>
+
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            {% for message in messages %}
+                <div class="message">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <h2>Pridėti naują žmogų</h2>
+    <form method="POST" action="/add">
+        <input type="text" name="first_name" placeholder="Vardas" required style="padding:8px;">
+        <input type="text" name="last_name" placeholder="Pavardė" required style="padding:8px;">
+        <button type="submit" style="padding:8px 16px;">Pridėti</button>
+    </form>
+
+    <hr>
+    <h2>Žmonių sąrašas</h2>
+    <ul>
+    {% for p in people %}
+        <li>
+            <strong>{{ p.first_name }} {{ p.last_name }}</strong><br><br>
+            <a href="/generate_qr/{{ p.id }}" style="font-size: 16px; padding: 8px 12px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;">
+                🔄 Generuoti / Atnaujinti QR kodą
+            </a>
+            <br><br>
+            <img src="/static/qrcodes/{{ p.id }}.png" width="220" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';">
+            <span style="color: gray; display: none;">QR kodas dar nesugeneruotas</span>
+        </li>
+    {% endfor %}
+    </ul>
+
+    <br>
+    <a href="/logs" style="font-size: 18px;">📋 Peržiūrėti visus skenavimų logus</a>
+</body>
+</html>
