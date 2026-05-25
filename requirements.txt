@@ -1,5 +1,7 @@
 flask
 flask-sqlalchemy
 qrcode[pil]
-pillow
+pandas
+openpyxl
 gunicorn
+python-dotenv
