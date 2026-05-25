@@ -3,11 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <title>Sėkminga</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin: 100px; background-color: #f0f8f0; }
+        h1 { color: #28a745; }
+        .back { margin-top: 30px; font-size: 18px; }
+    </style>
 </head>
 <body>
-    <h1>✅ Sėkmingai nuskenuota!</h1>
+    <h1>✅ Ačiū!</h1>
     <h2>{{ person.first_name }} {{ person.last_name }}</h2>
-    <p><strong>Laikas:</strong> {{ moment.now() }}</p>
-    <a href="/">← Grįžti į pagrindinį puslapį</a>
+    <p>Jūs sėkmingai užsiregistravote / nuskenavote QR kodą.</p>
+    <p><strong>Laikas:</strong> {{ moment.now() if moment else 'Dabar' }}</p>
+    <div class="back">
+        <a href="/">← Grįžti į pagrindinį puslapį</a>
+    </div>
 </body>
 </html>
