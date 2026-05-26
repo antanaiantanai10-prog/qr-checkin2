@@ -1,10 +1,11 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session
+from flask import Flask, render_template, request, redirect, url_for, flash, session, send_file
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 import qrcode
 import os
 from zoneinfo import ZoneInfo
 import pandas as pd
+from io import BytesIO
 
 app = Flask(__name__)
 
@@ -91,7 +92,7 @@ def add_person():
     flash(f'Pridėtas: {person.first_name} {person.last_name}')
     return redirect(url_for('index'))
 
-# === ĮKĖLIMAS IŠ EXCEL ===
+# ================== EXCEL ĮKĖLIMAS ==================
 @app.route('/upload', methods=['POST'])
 def upload_file():
     if not is_admin():
@@ -119,53 +120,11 @@ def upload_file():
 
         added_count = 0
         for _, row in df.iterrows():
-            certificate_number = None
-            first_name = None
-            last_name = None
-            license_number = None
-            email = None
-
-            col_map = {str(col).strip().lower(): col for col in df.columns}
-
-            # 1. Pažymėjimo numeris
-            for key in ['pažymėjimo numeris', 'pazyme', 'certificate_number', 'certificate']:
-                if key in col_map:
-                    certificate_number = str(row[col_map[key]]).strip()
-                    break
-            if not certificate_number and len(df.columns) > 0:
-                certificate_number = str(row.iloc[0]).strip()
-
-            # 2. Vardas
-            for key in ['vardas', 'first_name', 'name']:
-                if key in col_map:
-                    first_name = str(row[col_map[key]]).strip()
-                    break
-            if not first_name and len(df.columns) > 1:
-                first_name = str(row.iloc[1]).strip()
-
-            # 3. Pavardė
-            for key in ['pavardė', 'pavarde', 'last_name', 'surname']:
-                if key in col_map:
-                    last_name = str(row[col_map[key]]).strip()
-                    break
-            if not last_name and len(df.columns) > 2:
-                last_name = str(row.iloc[2]).strip()
-
-            # 4. Licencijos numeris
-            for key in ['licencijos numeris', 'licencija', 'license_number', 'license']:
-                if key in col_map:
-                    license_number = str(row[col_map[key]]).strip()
-                    break
-            if not license_number and len(df.columns) > 3:
-                license_number = str(row.iloc[3]).strip()
-
-            # 5. El. paštas
-            for key in ['el. paštas', 'el pastas', 'email', 'e-mail']:
-                if key in col_map:
-                    email = str(row[col_map[key]]).strip()
-                    break
-            if not email and len(df.columns) > 4:
-                email = str(row.iloc[4]).strip()
+            certificate_number = str(row.iloc[0] if len(df.columns) > 0 else '').strip()
+            first_name = str(row.iloc[1] if len(df.columns) > 1 else '').strip()
+            last_name = str(row.iloc[2] if len(df.columns) > 2 else '').strip()
+            license_number = str(row.iloc[3] if len(df.columns) > 3 else '').strip()
+            email = str(row.iloc[4] if len(df.columns) > 4 else '').strip()
 
             if first_name and last_name and first_name.lower() != 'nan' and last_name.lower() != 'nan':
                 person = Person(
@@ -186,23 +145,151 @@ def upload_file():
     
     return redirect(url_for('index'))
 
+# ================== MASINIAI VEIKSMAI ==================
+@app.route('/bulk_action', methods=['POST'])
+def bulk_action():
+    if not is_admin():
+        flash('Tik administratorius gali atlikti masinius veiksmus!')
+        return redirect(url_for('index'))
+
+    action = request.form.get('action')
+    person_ids = request.form.getlist('person_ids')
+
+    if not person_ids:
+        flash('Nepasirinktas nė vienas žmogus!')
+        return redirect(url_for('index'))
+
+    if not action:
+        flash('Nepasirinktas veiksmas!')
+        return redirect(url_for('index'))
+
+    success_count = 0
+
+    for pid_str in person_ids:
+        try:
+            person_id = int(pid_str)
+            person = Person.query.get(person_id)
+            if not person:
+                continue
+
+            if action == 'generate_qr':
+                base_url = request.host_url.rstrip('/')
+                url = f"{base_url}/checkin/{person.id}"
+                qr = qrcode.make(url)
+                os.makedirs("static/qrcodes", exist_ok=True)
+                qr_path = f"static/qrcodes/{person.id}.png"
+                qr.save(qr_path)
+                success_count += 1
+
+            elif action == 'delete_qr':
+                qr_path = f"static/qrcodes/{person.id}.png"
+                if os.path.exists(qr_path):
+                    os.remove(qr_path)
+                    success_count += 1
+
+            elif action == 'delete_person':
+                qr_path = f"static/qrcodes/{person.id}.png"
+                if os.path.exists(qr_path):
+                    os.remove(qr_path)
+                db.session.delete(person)
+                success_count += 1
+
+        except Exception as e:
+            print(f"Klaida apdorojant ID {pid_str}: {e}")
+
+    db.session.commit()
+
+    if action == 'generate_qr':
+        flash(f'Sėkmingai sugeneruoti QR kodai {success_count} žmonėms.')
+    elif action == 'delete_qr':
+        flash(f'Ištrinti QR kodai {success_count} žmonėms.')
+    elif action == 'delete_person':
+        flash(f'Visiškai ištrinti {success_count} žmonės.')
+
+    return redirect(url_for('index'))
+
+# ================== LOGAI IR EKSPORTAS ==================
+@app.route('/logs')
+def logs():
+    all_logs = ScanLog.query.order_by(ScanLog.scanned_at.desc()).all()
+    
+    total_people = Person.query.count()
+    people_with_qr = 0
+    for p in Person.query.all():
+        if os.path.exists(f"static/qrcodes/{p.id}.png"):
+            people_with_qr += 1
+    
+    total_registrations = len(all_logs)
+    unique_registered = len(set(log.person_id for log in all_logs))
+    
+    return render_template('logs.html', 
+                         logs=all_logs, 
+                         is_admin=is_admin(),
+                         total_people=total_people,
+                         people_with_qr=people_with_qr,
+                         total_registrations=total_registrations,
+                         unique_registered=unique_registered)
+
+@app.route('/export_logs')
+def export_logs():
+    if not is_admin():
+        flash('Tik administratorius gali eksportuoti!')
+        return redirect(url_for('logs'))
+
+    logs = ScanLog.query.order_by(ScanLog.scanned_at.desc()).all()
+
+    data = []
+    for log in logs:
+        person = Person.query.get(log.person_id)
+        data.append({
+            'Pažymėjimo numeris': person.certificate_number if person else '',
+            'Vardas': log.first_name,
+            'Pavardė': log.last_name,
+            'Licencijos numeris': person.license_number if person else '',
+            'El. paštas': person.email if person else '',
+            'Skenavimo laikas': log.scanned_at.strftime('%Y-%m-%d %H:%M:%S')
+        })
+
+    df = pd.DataFrame(data)
+    
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Registracijos')
+    
+    output.seek(0)
+    
+    return send_file(
+        output, 
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=f'registracijos_{datetime.now(LT_TIMEZONE).strftime("%Y-%m-%d_%H-%M")}.xlsx'
+    )
+
+# ================== KITI VEIKSMAI ==================
+@app.route('/generate_qr/<int:person_id>')
+def generate_qr(person_id):
+    if not is_admin():
+        flash('Tik administratorius gali generuoti QR!')
+        return redirect(url_for('index'))
+    person = Person.query.get_or_404(person_id)
+    base_url = request.host_url.rstrip('/')
+    url = f"{base_url}/checkin/{person.id}"
+    qr = qrcode.make(url)
+    os.makedirs("static/qrcodes", exist_ok=True)
+    qr.save(f"static/qrcodes/{person.id}.png")
+    flash(f'QR sugeneruotas: {person.first_name} {person.last_name}')
+    return redirect(url_for('index'))
+
 @app.route('/delete_qr/<int:person_id>')
 def delete_qr(person_id):
     if not is_admin():
         flash('Tik administratorius gali trinti!')
         return redirect(url_for('index'))
-    
     person = Person.query.get_or_404(person_id)
     qr_path = f"static/qrcodes/{person.id}.png"
-    
     if os.path.exists(qr_path):
-        try:
-            os.remove(qr_path)
-            flash(f'Ištrintas QR kodas: {person.first_name} {person.last_name}')
-        except:
-            flash('Klaida trinant QR kodą')
-    else:
-        flash('QR kodas jau nėra')
+        os.remove(qr_path)
+        flash(f'Ištrintas QR kodas: {person.first_name} {person.last_name}')
     return redirect(url_for('index'))
 
 @app.route('/delete_person/<int:person_id>')
@@ -210,43 +297,18 @@ def delete_person(person_id):
     if not is_admin():
         flash('Tik administratorius gali trinti!')
         return redirect(url_for('index'))
-    
     person = Person.query.get_or_404(person_id)
-    
     qr_path = f"static/qrcodes/{person.id}.png"
     if os.path.exists(qr_path):
-        try:
-            os.remove(qr_path)
-        except:
-            pass
-    
+        os.remove(qr_path)
     db.session.delete(person)
     db.session.commit()
     flash(f'Žmogus visiškai ištrintas: {person.first_name} {person.last_name}')
     return redirect(url_for('index'))
 
-@app.route('/generate_qr/<int:person_id>')
-def generate_qr(person_id):
-    if not is_admin():
-        flash('Tik administratorius gali generuoti QR kodus!')
-        return redirect(url_for('index'))
-    
-    person = Person.query.get_or_404(person_id)
-    base_url = request.host_url.rstrip('/')
-    url = f"{base_url}/checkin/{person.id}"
-    
-    qr = qrcode.make(url)
-    os.makedirs("static/qrcodes", exist_ok=True)
-    qr_path = f"static/qrcodes/{person.id}.png"
-    qr.save(qr_path)
-    
-    flash(f'QR kodas sugeneruotas: {person.first_name} {person.last_name}')
-    return redirect(url_for('index'))
-
 @app.route('/checkin/<int:person_id>')
 def checkin(person_id):
     person = Person.query.get_or_404(person_id)
-    
     today = datetime.now(LT_TIMEZONE).date()
     existing = ScanLog.query.filter(
         ScanLog.person_id == person.id,
@@ -261,24 +323,14 @@ def checkin(person_id):
         db.session.commit()
         message = f'Sėkmingai užsiregistravote!'
 
-    current_time = datetime.now(LT_TIMEZONE)
-    
-    return render_template('success.html', 
-                         person=person, 
-                         now=current_time.strftime('%Y-%m-%d %H:%M:%S'),
-                         message=message)
-
-@app.route('/logs')
-def logs():
-    all_logs = ScanLog.query.order_by(ScanLog.scanned_at.desc()).all()
-    return render_template('logs.html', logs=all_logs, is_admin=is_admin())
+    now = datetime.now(LT_TIMEZONE).strftime('%Y-%m-%d %H:%M:%S')
+    return render_template('success.html', person=person, now=now, message=message)
 
 @app.route('/delete_log/<int:log_id>')
 def delete_log(log_id):
     if not is_admin():
         flash('Tik administratorius gali trinti įrašus!')
         return redirect(url_for('logs'))
-    
     log = ScanLog.query.get_or_404(log_id)
     db.session.delete(log)
     db.session.commit()
