@@ -2,92 +2,128 @@
 <html lang="lt">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Skenavimų Logai</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    
     <style>
-        body { 
-            font-family: Arial, sans-serif; 
-            margin: 40px; 
-            background-color: #f9f9f9; 
+        body {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
         }
-        h1 { color: #333; }
-        table { 
-            width: 100%; 
-            border-collapse: collapse; 
-            margin-top: 20px; 
-            background: white;
+        .card {
+            transition: all 0.3s ease;
         }
-        th, td { 
-            padding: 12px; 
-            text-align: left; 
-            border-bottom: 1px solid #ddd; 
-        }
-        th { 
-            background-color: #f2f2f2; 
-        }
-        .back { 
-            margin-bottom: 20px; 
-            font-size: 18px;
-        }
-        .empty { 
-            font-size: 18px; 
-            color: #666; 
-            margin-top: 30px; 
-        }
-        .btn-delete {
-            padding: 6px 12px;
-            background: #dc3545;
-            color: white;
-            text-decoration: none;
-            border-radius: 4px;
-            font-size: 14px;
-        }
-        .btn-delete:hover {
-            background: #c82333;
+        .table-row:hover {
+            background-color: #f8fafc;
         }
     </style>
 </head>
-<body>
-    <h1>📋 Skenavimų Logai</h1>
-    
-    <div class="back">
-        <a href="/">← Grįžti į pagrindinį puslapį</a>
+<body class="min-h-screen">
+
+    <!-- Admin Bar -->
+    <div class="bg-gray-900 text-white py-4 shadow-lg">
+        <div class="max-w-7xl mx-auto px-6 flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <i class="fas fa-list-check text-2xl"></i>
+                <h1 class="text-2xl font-bold">Skenavimų Logai</h1>
+            </div>
+            <a href="/" class="bg-white text-gray-900 px-6 py-2.5 rounded-xl font-medium hover:bg-gray-100 transition flex items-center gap-2">
+                <i class="fas fa-arrow-left"></i> Grįžti į pagrindinį
+            </a>
+        </div>
     </div>
 
-    {% if is_admin %}
-    <p><strong>Administratoriaus režimas — galite trinti įrašus</strong></p>
-    {% endif %}
+    <div class="max-w-7xl mx-auto px-6 py-8">
 
-    {% if logs %}
-        <table>
-            <tr>
-                <th>#</th>
-                <th>Vardas</th>
-                <th>Pavardė</th>
-                <th>Skenavimo laikas</th>
-                {% if is_admin %}
-                <th>Veiksmai</th>
-                {% endif %}
-            </tr>
-            {% for log in logs %}
-            <tr>
-                <td>{{ loop.index }}</td>
-                <td><strong>{{ log.first_name }}</strong></td>
-                <td><strong>{{ log.last_name }}</strong></td>
-                <td>{{ log.scanned_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
-                {% if is_admin %}
-                <td>
-                    <a href="/delete_log/{{ log.id }}" 
-                       class="btn-delete"
-                       onclick="return confirm('Ar tikrai norite ištrinti šį įrašą?')">
-                        🗑️ Ištrinti
-                    </a>
-                </td>
-                {% endif %}
-            </tr>
-            {% endfor %}
-        </table>
-    {% else %}
-        <p class="empty">Kol kas nėra jokių skenavimų. Nuskenuok QR kodą, kad atsirastų įrašai.</p>
-    {% endif %}
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="bg-green-100 border border-green-400 text-green-700 px-6 py-4 rounded-2xl mb-6">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- Statistika -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-6 mb-10">
+            <div class="bg-white rounded-3xl shadow-xl p-6 card">
+                <p class="text-gray-500 text-sm">Viso žmonių</p>
+                <h2 class="text-4xl font-bold text-gray-800 mt-2">{{ total_people }}</h2>
+            </div>
+            <div class="bg-white rounded-3xl shadow-xl p-6 card">
+                <p class="text-gray-500 text-sm">Sugeneruota QR</p>
+                <h2 class="text-4xl font-bold text-blue-600 mt-2">{{ people_with_qr }}</h2>
+            </div>
+            <div class="bg-white rounded-3xl shadow-xl p-6 card">
+                <p class="text-gray-500 text-sm">Iš viso registracijų</p>
+                <h2 class="text-4xl font-bold text-green-600 mt-2">{{ total_registrations }}</h2>
+            </div>
+            <div class="bg-white rounded-3xl shadow-xl p-6 card">
+                <p class="text-gray-500 text-sm">Unikalūs dalyviai</p>
+                <h2 class="text-4xl font-bold text-purple-600 mt-2">{{ unique_registered }}</h2>
+            </div>
+        </div>
+
+        <!-- Eksporto mygtukas -->
+        <div class="flex justify-end mb-6">
+            <a href="/export_logs" 
+               class="bg-green-600 hover:bg-green-700 text-white px-8 py-4 rounded-2xl font-medium flex items-center gap-3 shadow-lg">
+                <i class="fas fa-download"></i> 
+                Eksportuoti į Excel
+            </a>
+        </div>
+
+        <!-- Logų lentelė -->
+        <div class="bg-white rounded-3xl shadow-xl overflow-hidden">
+            {% if logs %}
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead>
+                            <tr class="bg-gray-50 border-b">
+                                <th class="px-8 py-5 text-left font-medium text-gray-600">Nr.</th>
+                                <th class="px-8 py-5 text-left font-medium text-gray-600">Vardas ir Pavardė</th>
+                                <th class="px-8 py-5 text-left font-medium text-gray-600">Skenavimo laikas</th>
+                                {% if is_admin %}
+                                <th class="px-8 py-5 text-center font-medium text-gray-600">Veiksmai</th>
+                                {% endif %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for log in logs %}
+                            <tr class="table-row border-b last:border-none hover:bg-gray-50">
+                                <td class="px-8 py-6 text-gray-500">{{ loop.index }}</td>
+                                <td class="px-8 py-6 font-medium">
+                                    {{ log.first_name }} {{ log.last_name }}
+                                </td>
+                                <td class="px-8 py-6 text-gray-600">
+                                    {{ log.scanned_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                                </td>
+                                {% if is_admin %}
+                                <td class="px-8 py-6 text-center">
+                                    <a href="/delete_log/{{ log.id }}" 
+                                       onclick="return confirm('Ištrinti šį įrašą?')"
+                                       class="text-red-600 hover:text-red-700 hover:bg-red-50 px-5 py-2 rounded-xl transition inline-flex items-center gap-2">
+                                        <i class="fas fa-trash"></i> Ištrinti
+                                    </a>
+                                </td>
+                                {% endif %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="p-20 text-center">
+                    <i class="fas fa-clipboard-list text-6xl text-gray-300 mb-6"></i>
+                    <h3 class="text-2xl font-medium text-gray-400">Kol kas nėra registracijų</h3>
+                    <p class="text-gray-500 mt-3">Kai kas nors nuskenuos QR kodą, čia matysite visus įrašus.</p>
+                </div>
+            {% endif %}
+        </div>
+
+    </div>
+
 </body>
 </html>

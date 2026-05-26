@@ -64,8 +64,7 @@ def logout():
 def is_admin():
     return session.get('admin') == True
 
-# ================== PUSLAPIAI ==================
-
+# ================== PAGRINDINIS PUSLAPIS ==================
 @app.route('/')
 def index():
     if is_admin():
@@ -74,6 +73,7 @@ def index():
         people = []
     return render_template('index.html', people=people, is_admin=is_admin())
 
+# ================== PRIDĖTI VIENĄ ==================
 @app.route('/add', methods=['POST'])
 def add_person():
     if not is_admin():
@@ -194,8 +194,8 @@ def bulk_action():
                 db.session.delete(person)
                 success_count += 1
 
-        except Exception as e:
-            print(f"Klaida apdorojant ID {pid_str}: {e}")
+        except:
+            pass
 
     db.session.commit()
 
@@ -237,7 +237,6 @@ def export_logs():
         return redirect(url_for('logs'))
 
     logs = ScanLog.query.order_by(ScanLog.scanned_at.desc()).all()
-
     data = []
     for log in logs:
         person = Person.query.get(log.person_id)
@@ -251,19 +250,13 @@ def export_logs():
         })
 
     df = pd.DataFrame(data)
-    
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Registracijos')
-    
+        df.to_excel(writer, index=False)
     output.seek(0)
     
-    return send_file(
-        output, 
-        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        as_attachment=True,
-        download_name=f'registracijos_{datetime.now(LT_TIMEZONE).strftime("%Y-%m-%d_%H-%M")}.xlsx'
-    )
+    return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                     as_attachment=True, download_name=f'registracijos_{datetime.now().strftime("%Y-%m-%d")}.xlsx')
 
 # ================== KITI VEIKSMAI ==================
 @app.route('/generate_qr/<int:person_id>')
@@ -329,7 +322,7 @@ def checkin(person_id):
 @app.route('/delete_log/<int:log_id>')
 def delete_log(log_id):
     if not is_admin():
-        flash('Tik administratorius gali trinti įrašus!')
+        flash('Tik administratorius gali trinti!')
         return redirect(url_for('logs'))
     log = ScanLog.query.get_or_404(log_id)
     db.session.delete(log)

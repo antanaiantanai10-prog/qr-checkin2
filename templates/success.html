@@ -2,39 +2,73 @@
 <html lang="lt">
 <head>
     <meta charset="UTF-8">
-    <title>Sėkminga</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sėkminga registracija</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    
     <style>
-        body { 
-            font-family: Arial, sans-serif; 
-            text-align: center; 
-            margin: 100px; 
-            background-color: #f0f8f0; 
+        body {
+            background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
         }
-        h1 { color: #28a745; }
-        .info { 
-            font-size: 22px; 
-            margin: 20px 0; 
+        .success-icon {
+            animation: scaleCheck 0.6s ease;
         }
-        .message {
-            font-size: 24px;
-            margin: 30px 0;
-            padding: 20px;
-            background: white;
-            border-radius: 10px;
-            display: inline-block;
+        @keyframes scaleCheck {
+            0% { transform: scale(0.5); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
         }
     </style>
 </head>
-<body>
-    <h1>✅ Ačiū!</h1>
-    <h2>{{ person.first_name }} {{ person.last_name }}</h2>
-    
-    <div class="message">
-        {{ message }}
+<body class="min-h-screen flex items-center justify-center">
+
+    <div class="max-w-md w-full mx-auto text-center px-6">
+
+        <div class="bg-white rounded-3xl shadow-2xl p-10 card">
+
+            <!-- Success Icon -->
+            <div class="mb-8">
+                <i class="fas fa-check-circle text-8xl text-green-500 success-icon"></i>
+            </div>
+
+            <h1 class="text-4xl font-bold text-green-600 mb-2">Sėkmingai užsiregistravote!</h1>
+            
+            <div class="my-8">
+                <h2 class="text-3xl font-semibold text-gray-800">
+                    {{ person.first_name }} {{ person.last_name }}
+                </h2>
+            </div>
+
+            <div class="bg-green-50 border border-green-200 rounded-2xl p-6 mb-8">
+                <p class="text-xl font-medium text-green-700">
+                    {{ message }}
+                </p>
+            </div>
+
+            <div class="text-gray-600 mb-8">
+                <p class="flex items-center justify-center gap-2 text-lg">
+                    <i class="fas fa-clock"></i>
+                    <strong>Skenavimo laikas:</strong> 
+                    <span class="font-mono">{{ now }}</span>
+                </p>
+            </div>
+
+            <!-- Mygtukas grįžti -->
+            <a href="/" 
+               class="block w-full bg-gray-800 hover:bg-black text-white py-5 rounded-2xl font-semibold text-lg transition flex items-center justify-center gap-3">
+                <i class="fas fa-arrow-left"></i>
+                Grįžti į pagrindinį puslapį
+            </a>
+
+        </div>
+
+        <!-- Maža papildoma žinutė -->
+        <p class="text-gray-500 mt-8 text-sm">
+            Ačiū, kad dalyvaujate!
+        </p>
+
     </div>
-    
-    <p><strong>Skenavimo laikas:</strong> {{ now }}</p>
-    
-    <!-- Nuoroda panaikinta kaip prašei -->
+
 </body>
 </html>
