@@ -29,11 +29,18 @@
                 <i class="fas fa-qrcode text-2xl"></i>
                 <h1 class="text-2xl font-bold">QR Check-in</h1>
             </div>
+            
             {% if is_admin %}
-                <div class="flex items-center gap-4">
+                <div class="flex items-center gap-3">
                     <span class="text-green-400 text-sm flex items-center gap-2">
                         <i class="fas fa-circle"></i> Administratorius
                     </span>
+                    
+                    <a href="/change_password" 
+                       class="bg-amber-600 hover:bg-amber-700 px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2">
+                        <i class="fas fa-key"></i> Keisti slaptažodį
+                    </a>
+                    
                     <a href="/logout" class="bg-red-600 hover:bg-red-700 px-5 py-2 rounded-lg text-sm font-medium transition">
                         <i class="fas fa-sign-out-alt"></i> Atsijungti
                     </a>
@@ -50,7 +57,6 @@
 
         <h1 class="text-4xl font-bold text-gray-800 mb-8 text-center">QR Kodų Check-in Sistema</h1>
 
-        <!-- Flash Messages -->
         {% with messages = get_flashed_messages() %}
             {% if messages %}
                 {% for message in messages %}
@@ -79,6 +85,7 @@
                     <i class="fas fa-file-excel text-green-600"></i> Įkelti iš Excel / CSV
                 </h2>
                 <form method="POST" action="/upload" enctype="multipart/form-data" class="space-y-4">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="file" name="file" accept=".xlsx,.xls,.csv" required 
                            class="block w-full text-sm text-gray-500 file:mr-4 file:py-3 file:px-6 file:rounded-xl file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
                     <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white py-4 rounded-2xl font-medium text-lg transition">
@@ -94,6 +101,7 @@
             <div class="bg-white rounded-3xl shadow-xl p-8 card">
                 <h2 class="text-2xl font-semibold mb-6">Pridėti vieną žmogų</h2>
                 <form method="POST" action="/add" class="grid grid-cols-2 gap-4">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="text" name="certificate_number" placeholder="Pažymėjimo nr." 
                            class="col-span-2 border rounded-2xl px-5 py-4 focus:outline-none focus:ring-2 focus:ring-blue-500">
                     <input type="text" name="first_name" placeholder="Vardas" required 
@@ -112,60 +120,72 @@
 
         </div>
 
-        <!-- Žmonių sąrašas -->
-        <div class="mt-10 bg-white rounded-3xl shadow-xl p-8">
-            <div class="flex justify-between items-center mb-8">
-                <h2 class="text-2xl font-semibold">Žmonių sąrašas ({{ people|length }})</h2>
-                
-                <form method="POST" action="/bulk_action" id="bulk-form" class="flex items-center gap-4">
-                    <input type="checkbox" id="select-all" class="w-5 h-5">
-                    <select name="action" required class="border rounded-2xl px-5 py-3">
-                        <option value="">Veiksmas...</option>
-                        <option value="generate_qr">Generuoti QR</option>
-                        <option value="delete_qr">Ištrinti QR</option>
-                        <option value="delete_person">Ištrinti žmogų</option>
-                    </select>
-                    <button type="submit" onclick="return confirm('Atlikti veiksmą?')" 
-                            class="bg-gray-800 hover:bg-black text-white px-8 py-3 rounded-2xl">
-                        Atlikti
-                    </button>
-                </form>
-            </div>
+        <!-- MASINIAI VEIKSMAI + ŽMONIŲ SĄRAŠAS -->
+        <form method="POST" action="/bulk_action" id="bulk-form" class="mt-10">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {% for p in people %}
-                <div class="border border-gray-200 rounded-3xl p-6 card bg-white">
-                    <div class="flex items-start justify-between">
-                        <div>
-                            <h3 class="font-semibold text-xl">{{ p.first_name }} {{ p.last_name }}</h3>
-                            {% if p.certificate_number %}<p class="text-sm text-gray-500">Pažymėjimas: {{ p.certificate_number }}</p>{% endif %}
-                        </div>
-                        <input type="checkbox" name="person_ids" value="{{ p.id }}" class="person-checkbox w-5 h-5 mt-1">
-                    </div>
-
-                    <div class="mt-6 flex flex-wrap gap-3">
-                        <a href="/generate_qr/{{ p.id }}" class="flex-1 text-center bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-2xl text-sm font-medium">
-                            <i class="fas fa-qrcode"></i> QR
-                        </a>
-                        <a href="/delete_qr/{{ p.id }}" class="flex-1 text-center bg-amber-500 hover:bg-amber-600 text-white py-3 rounded-2xl text-sm font-medium"
-                           onclick="return confirm('Ištrinti QR kodą?')">
-                            <i class="fas fa-trash"></i> QR
-                        </a>
-                        <a href="/delete_person/{{ p.id }}" class="flex-1 text-center bg-red-600 hover:bg-red-700 text-white py-3 rounded-2xl text-sm font-medium"
-                           onclick="return confirm('VISOIŠTRINTI žmogų?')">
-                            <i class="fas fa-user-minus"></i> Žmogų
-                        </a>
-                    </div>
-
-                    <div class="mt-6 text-center">
-                        <img src="/static/qrcodes/{{ p.id }}.png" width="180" class="mx-auto rounded-xl shadow-md"
-                             onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-                        <p class="text-gray-400 text-sm hidden">QR kodas nesugeneruotas</p>
+            <div class="bg-white rounded-3xl shadow-xl p-8">
+                <div class="flex justify-between items-center mb-8">
+                    <h2 class="text-2xl font-semibold">Žmonių sąrašas ({{ people|length }})</h2>
+                    
+                    <div class="flex items-center gap-4">
+                        <input type="checkbox" id="select-all" class="w-5 h-5">
+                        <select name="action" required class="border rounded-2xl px-5 py-3">
+                            <option value="">Veiksmas...</option>
+                            <option value="generate_qr">Generuoti QR</option>
+                            <option value="delete_qr">Ištrinti QR</option>
+                            <option value="delete_person">Ištrinti žmogų</option>
+                            <option value="download_all_qr">📥 Atsisiųsti visus QR kaip ZIP</option>
+                        </select>
+                        <button type="submit" onclick="return confirm('Atlikti pasirinktą veiksmą visiems pažymėtiems?')" 
+                                class="bg-gray-800 hover:bg-black text-white px-8 py-3 rounded-2xl font-medium">
+                            Atlikti
+                        </button>
                     </div>
                 </div>
-                {% endfor %}
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {% for p in people %}
+                    <div class="border border-gray-200 rounded-3xl p-6 card bg-white">
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <h3 class="font-semibold text-xl">{{ p.first_name }} {{ p.last_name }}</h3>
+                                {% if p.certificate_number %}<p class="text-sm text-gray-500">Pažymėjimas: {{ p.certificate_number }}</p>{% endif %}
+                            </div>
+                            <input type="checkbox" name="person_ids" value="{{ p.id }}" 
+                                   class="person-checkbox w-5 h-5 mt-1 accent-blue-600">
+                        </div>
+
+                        <div class="mt-6 flex flex-wrap gap-3">
+                            <a href="/generate_qr/{{ p.id }}" class="flex-1 text-center bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-2xl text-sm font-medium">
+                                <i class="fas fa-qrcode"></i> Generuoti QR
+                            </a>
+                            <a href="/delete_qr/{{ p.id }}" class="flex-1 text-center bg-amber-500 hover:bg-amber-600 text-white py-3 rounded-2xl text-sm font-medium"
+                               onclick="return confirm('Ištrinti QR kodą?')">
+                                <i class="fas fa-trash"></i> QR
+                            </a>
+                            <a href="/delete_person/{{ p.id }}" class="flex-1 text-center bg-red-600 hover:bg-red-700 text-white py-3 rounded-2xl text-sm font-medium"
+                               onclick="return confirm('VISOIŠTRINTI žmogų?')">
+                                <i class="fas fa-user-minus"></i> Žmogų
+                            </a>
+                        </div>
+
+                        <div class="mt-6 text-center">
+                            <!-- PATAISYTAS VARIANTAS -->
+                            <a href="/download_qr/{{ p.id }}" 
+                               title="Atsisiųsti kaip {{ p.first_name }} {{ p.last_name }}.png">
+                                <img src="/static/qrcodes/{{ p.id }}.png"
+                                     width="180"
+                                     class="mx-auto rounded-xl shadow-md cursor-pointer hover:opacity-90 transition"
+                                     onerror="this.style.display='none'; this.parentElement.nextElementSibling.style.display='block';">
+                            </a>
+                            <p class="text-gray-400 text-sm hidden mt-2">QR kodas nesugeneruotas</p>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
             </div>
-        </div>
+        </form>
 
         {% endif %}
 
@@ -180,7 +200,6 @@
     </div>
 
     <script>
-        // Pažymėti visus
         document.getElementById('select-all').addEventListener('change', function() {
             document.querySelectorAll('.person-checkbox').forEach(checkbox => {
                 checkbox.checked = this.checked;

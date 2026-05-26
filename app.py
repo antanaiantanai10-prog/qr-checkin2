@@ -1,20 +1,25 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, send_file
 from flask_sqlalchemy import SQLAlchemy
+from flask_wtf.csrf import CSRFProtect
 from datetime import datetime
 import qrcode
 import os
 from zoneinfo import ZoneInfo
 import pandas as pd
 from io import BytesIO
+from werkzeug.security import generate_password_hash, check_password_hash
+from PIL import Image, ImageDraw, ImageFont
+import zipfile
 
 app = Flask(__name__)
 
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'labai_slapta_fraze_kuri_pakeisk')
+# SAUGUMO KONFIGŪRACIJA
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'labai_slapta_fraze_kuri_pakeisk_2026')
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024
 
 db = SQLAlchemy(app)
+csrf = CSRFProtect(app)
 
 LT_TIMEZONE = ZoneInfo("Europe/Vilnius")
 
@@ -35,34 +40,139 @@ class ScanLog(db.Model):
     last_name = db.Column(db.String(50))
     scanned_at = db.Column(db.DateTime, default=lambda: datetime.now(LT_TIMEZONE))
 
+class AdminUser(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(50), unique=True, nullable=False)
+    password_hash = db.Column(db.String(256), nullable=False)
+
 with app.app_context():
     db.create_all()
+    
+    if not AdminUser.query.filter_by(username="admin").first():
+        admin = AdminUser(
+            username="admin",
+            password_hash=generate_password_hash("admin123")
+        )
+        db.session.add(admin)
+        db.session.commit()
 
-# ================== ADMIN ==================
-ADMIN_USERNAME = "admin"
-ADMIN_PASSWORD = "admin123"   
+# ================== PAGALBINĖS FUNKCIJOS ==================
+def is_admin():
+    return session.get('admin') == True
 
+def generate_qr_with_name(person):
+    base_url = request.host_url.rstrip('/')
+    url = f"{base_url}/checkin/{person.id}"
+    
+    qr = qrcode.QRCode(version=1, box_size=10, border=4)
+    qr.add_data(url)
+    qr.make(fit=True)
+    
+    qr_img = qr.make_image(fill_color="black", back_color="white").convert('RGB')
+    
+    width, height = qr_img.size
+    new_height = height + 70
+    combined = Image.new('RGB', (width, new_height), color='white')
+    combined.paste(qr_img, (0, 0))
+    
+    draw = ImageDraw.Draw(combined)
+    
+    try:
+        font = ImageFont.truetype("arial.ttf", 24)
+    except:
+        try:
+            font = ImageFont.truetype("DejaVuSans-Bold.ttf", 24)
+        except:
+            font = ImageFont.load_default()
+    
+    full_name = f"{person.first_name} {person.last_name}"
+    text_width = draw.textlength(full_name, font=font)
+    text_x = (width - text_width) // 2
+    text_y = height + 20
+    
+    draw.text((text_x, text_y), full_name, fill="black", font=font)
+    
+    os.makedirs("static/qrcodes", exist_ok=True)
+    qr_path = f"static/qrcodes/{person.id}.png"
+    combined.save(qr_path)
+    return qr_path
+
+# ================== VIENO QR ATSISIUNTIMAS ==================
+@app.route('/download_qr/<int:person_id>')
+def download_qr(person_id):
+    if not is_admin():
+        flash('Tik administratorius gali atsisiųsti QR!', 'danger')
+        return redirect(url_for('index'))
+    
+    person = Person.query.get_or_404(person_id)
+    qr_path = f"static/qrcodes/{person.id}.png"
+    
+    if not os.path.exists(qr_path):
+        flash('QR kodas dar nesugeneruotas!', 'danger')
+        return redirect(url_for('index'))
+    
+    filename = f"{person.first_name}_{person.last_name}.png".replace(" ", "_")
+    return send_file(qr_path, as_attachment=True, download_name=filename)
+
+# ================== VISŲ QR ATSISIUNTIMAS KAIP ZIP ==================
+@app.route('/download_all_qr', methods=['POST'])
+def download_all_qr():
+    if not is_admin():
+        flash('Tik administratorius gali atsisiųsti!', 'danger')
+        return redirect(url_for('index'))
+
+    person_ids = request.form.getlist('person_ids')
+    if not person_ids:
+        flash('Nepasirinktas nė vienas žmogus!', 'danger')
+        return redirect(url_for('index'))
+
+    memory_file = BytesIO()
+    with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for pid_str in person_ids:
+            try:
+                person = Person.query.get(int(pid_str))
+                if not person:
+                    continue
+                
+                qr_path = f"static/qrcodes/{person.id}.png"
+                if not os.path.exists(qr_path):
+                    generate_qr_with_name(person)
+                
+                if os.path.exists(qr_path):
+                    filename = f"{person.first_name}_{person.last_name}.png".replace(" ", "_")
+                    zf.write(qr_path, filename)
+            except:
+                pass
+
+    memory_file.seek(0)
+    return send_file(memory_file, 
+                     mimetype='application/zip',
+                     as_attachment=True, 
+                     download_name=f'QR_kodai_{datetime.now().strftime("%Y-%m-%d_%H-%M")}.zip')
+
+# ================== LOGIN ==================
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
-        if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
+        
+        admin = AdminUser.query.filter_by(username=username).first()
+        
+        if admin and check_password_hash(admin.password_hash, password):
             session['admin'] = True
-            flash('Sėkmingai prisijungėte kaip administratorius')
+            flash('Sėkmingai prisijungėte kaip administratorius', 'success')
             return redirect(url_for('index'))
         else:
-            flash('Neteisingi prisijungimo duomenys')
+            flash('Neteisingi prisijungimo duomenys', 'danger')
+    
     return render_template('login.html')
 
 @app.route('/logout')
 def logout():
     session.pop('admin', None)
-    flash('Atsijungėte')
+    flash('Atsijungėte sėkmingai', 'info')
     return redirect(url_for('index'))
-
-def is_admin():
-    return session.get('admin') == True
 
 # ================== PAGRINDINIS PUSLAPIS ==================
 @app.route('/')
@@ -77,7 +187,7 @@ def index():
 @app.route('/add', methods=['POST'])
 def add_person():
     if not is_admin():
-        flash('Tik administratorius gali pridėti žmones!')
+        flash('Tik administratorius gali pridėti žmones!', 'danger')
         return redirect(url_for('index'))
     
     person = Person(
@@ -89,27 +199,27 @@ def add_person():
     )
     db.session.add(person)
     db.session.commit()
-    flash(f'Pridėtas: {person.first_name} {person.last_name}')
+    flash(f'Pridėtas: {person.first_name} {person.last_name}', 'success')
     return redirect(url_for('index'))
 
 # ================== EXCEL ĮKĖLIMAS ==================
 @app.route('/upload', methods=['POST'])
 def upload_file():
     if not is_admin():
-        flash('Tik administratorius gali įkelti failus!')
+        flash('Tik administratorius gali įkelti failus!', 'danger')
         return redirect(url_for('index'))
 
     if 'file' not in request.files:
-        flash('Nepasirinktas failas')
+        flash('Nepasirinktas failas', 'danger')
         return redirect(url_for('index'))
 
     file = request.files['file']
     if file.filename == '':
-        flash('Nepasirinktas failas')
+        flash('Nepasirinktas failas', 'danger')
         return redirect(url_for('index'))
 
     if not file.filename.endswith(('.xlsx', '.xls', '.csv')):
-        flash('Palaikomi tik .xlsx, .xls ir .csv failai')
+        flash('Palaikomi tik .xlsx, .xls ir .csv failai', 'danger')
         return redirect(url_for('index'))
 
     try:
@@ -138,10 +248,10 @@ def upload_file():
                 added_count += 1
 
         db.session.commit()
-        flash(f'Sėkmingai pridėta {added_count} žmonių iš failo!')
+        flash(f'Sėkmingai pridėta {added_count} žmonių iš failo!', 'success')
         
     except Exception as e:
-        flash(f'Klaida įkeliant failą: {str(e)}')
+        flash(f'Klaida įkeliant failą: {str(e)}', 'danger')
     
     return redirect(url_for('index'))
 
@@ -149,19 +259,18 @@ def upload_file():
 @app.route('/bulk_action', methods=['POST'])
 def bulk_action():
     if not is_admin():
-        flash('Tik administratorius gali atlikti masinius veiksmus!')
+        flash('Tik administratorius gali atlikti masinius veiksmus!', 'danger')
         return redirect(url_for('index'))
 
     action = request.form.get('action')
     person_ids = request.form.getlist('person_ids')
 
     if not person_ids:
-        flash('Nepasirinktas nė vienas žmogus!')
+        flash('Nepasirinktas nė vienas žmogus!', 'danger')
         return redirect(url_for('index'))
 
-    if not action:
-        flash('Nepasirinktas veiksmas!')
-        return redirect(url_for('index'))
+    if action == 'download_all_qr':
+        return download_all_qr()
 
     success_count = 0
 
@@ -173,12 +282,7 @@ def bulk_action():
                 continue
 
             if action == 'generate_qr':
-                base_url = request.host_url.rstrip('/')
-                url = f"{base_url}/checkin/{person.id}"
-                qr = qrcode.make(url)
-                os.makedirs("static/qrcodes", exist_ok=True)
-                qr_path = f"static/qrcodes/{person.id}.png"
-                qr.save(qr_path)
+                generate_qr_with_name(person)
                 success_count += 1
 
             elif action == 'delete_qr':
@@ -198,27 +302,15 @@ def bulk_action():
             pass
 
     db.session.commit()
-
-    if action == 'generate_qr':
-        flash(f'Sėkmingai sugeneruoti QR kodai {success_count} žmonėms.')
-    elif action == 'delete_qr':
-        flash(f'Ištrinti QR kodai {success_count} žmonėms.')
-    elif action == 'delete_person':
-        flash(f'Visiškai ištrinti {success_count} žmonės.')
-
+    flash(f'Sėkmingai atlikta {success_count} veiksmų.', 'success')
     return redirect(url_for('index'))
 
-# ================== LOGAI IR EKSPORTAS ==================
+# ================== KITI ROUTES ==================
 @app.route('/logs')
 def logs():
     all_logs = ScanLog.query.order_by(ScanLog.scanned_at.desc()).all()
-    
     total_people = Person.query.count()
-    people_with_qr = 0
-    for p in Person.query.all():
-        if os.path.exists(f"static/qrcodes/{p.id}.png"):
-            people_with_qr += 1
-    
+    people_with_qr = sum(1 for p in Person.query.all() if os.path.exists(f"static/qrcodes/{p.id}.png"))
     total_registrations = len(all_logs)
     unique_registered = len(set(log.person_id for log in all_logs))
     
@@ -233,7 +325,7 @@ def logs():
 @app.route('/export_logs')
 def export_logs():
     if not is_admin():
-        flash('Tik administratorius gali eksportuoti!')
+        flash('Tik administratorius gali eksportuoti!', 'danger')
         return redirect(url_for('logs'))
 
     logs = ScanLog.query.order_by(ScanLog.scanned_at.desc()).all()
@@ -258,37 +350,32 @@ def export_logs():
     return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                      as_attachment=True, download_name=f'registracijos_{datetime.now().strftime("%Y-%m-%d")}.xlsx')
 
-# ================== KITI VEIKSMAI ==================
 @app.route('/generate_qr/<int:person_id>')
 def generate_qr(person_id):
     if not is_admin():
-        flash('Tik administratorius gali generuoti QR!')
+        flash('Tik administratorius gali generuoti QR!', 'danger')
         return redirect(url_for('index'))
     person = Person.query.get_or_404(person_id)
-    base_url = request.host_url.rstrip('/')
-    url = f"{base_url}/checkin/{person.id}"
-    qr = qrcode.make(url)
-    os.makedirs("static/qrcodes", exist_ok=True)
-    qr.save(f"static/qrcodes/{person.id}.png")
-    flash(f'QR sugeneruotas: {person.first_name} {person.last_name}')
+    generate_qr_with_name(person)
+    flash(f'QR sugeneruotas: {person.first_name} {person.last_name}', 'success')
     return redirect(url_for('index'))
 
 @app.route('/delete_qr/<int:person_id>')
 def delete_qr(person_id):
     if not is_admin():
-        flash('Tik administratorius gali trinti!')
+        flash('Tik administratorius gali trinti!', 'danger')
         return redirect(url_for('index'))
     person = Person.query.get_or_404(person_id)
     qr_path = f"static/qrcodes/{person.id}.png"
     if os.path.exists(qr_path):
         os.remove(qr_path)
-        flash(f'Ištrintas QR kodas: {person.first_name} {person.last_name}')
+        flash(f'Ištrintas QR kodas: {person.first_name} {person.last_name}', 'success')
     return redirect(url_for('index'))
 
 @app.route('/delete_person/<int:person_id>')
 def delete_person(person_id):
     if not is_admin():
-        flash('Tik administratorius gali trinti!')
+        flash('Tik administratorius gali trinti!', 'danger')
         return redirect(url_for('index'))
     person = Person.query.get_or_404(person_id)
     qr_path = f"static/qrcodes/{person.id}.png"
@@ -296,7 +383,7 @@ def delete_person(person_id):
         os.remove(qr_path)
     db.session.delete(person)
     db.session.commit()
-    flash(f'Žmogus visiškai ištrintas: {person.first_name} {person.last_name}')
+    flash(f'Žmogus visiškai ištrintas: {person.first_name} {person.last_name}', 'success')
     return redirect(url_for('index'))
 
 @app.route('/checkin/<int:person_id>')
@@ -322,14 +409,16 @@ def checkin(person_id):
 @app.route('/delete_log/<int:log_id>')
 def delete_log(log_id):
     if not is_admin():
-        flash('Tik administratorius gali trinti!')
+        flash('Tik administratorius gali trinti!', 'danger')
         return redirect(url_for('logs'))
     log = ScanLog.query.get_or_404(log_id)
     db.session.delete(log)
     db.session.commit()
-    flash('Įrašas ištrintas')
+    flash('Įrašas ištrintas', 'success')
     return redirect(url_for('logs'))
 
 if __name__ == '__main__':
+    os.makedirs("static/qrcodes", exist_ok=True)
     port = int(os.environ.get("PORT", 5000))
+    print(f"✅ Serveris paleistas: http://127.0.0.1:{port}")
     app.run(host='0.0.0.0', port=port, debug=True)
